@@ -22,9 +22,7 @@ audio = pyaudio.PyAudio()
 
 def record_audio_thread(end_of_send_event, websocket, loop):
     # Open the stream for recording
-    stream = audio.open(format=FORMAT, channels=CHANNELS,
-                        rate=RATE, input=True,
-                        frames_per_buffer=CHUNK)
+    stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
 
     print("Recording...")
 
@@ -37,7 +35,7 @@ def record_audio_thread(end_of_send_event, websocket, loop):
                 wf.setnchannels(CHANNELS)
                 wf.setsampwidth(audio.get_sample_size(FORMAT))
                 wf.setframerate(RATE)
-                wf.writeframes(b''.join([data]))
+                wf.writeframes(b"".join([data]))
 
             # Move the pointer to the beginning of the BytesIO object
             wav_file.seek(0)
@@ -46,13 +44,12 @@ def record_audio_thread(end_of_send_event, websocket, loop):
             base64_encoded_data = base64.b64encode(wav_file.read())
 
         # Convert to string for JSON
-        base64_string = base64_encoded_data.decode('utf-8')
+        base64_string = base64_encoded_data.decode("utf-8")
 
         # Create JSON object
         json_object = json.dumps({"audio": base64_string, "uid": "1234567890"})
         # Send the audio message
-        asyncio.run_coroutine_threadsafe(
-            websocket.send(json_object), loop)
+        asyncio.run_coroutine_threadsafe(websocket.send(json_object), loop)
 
     print("Finished recording.")
 
@@ -113,38 +110,41 @@ async def connect_websocket():
     # End event to coordinate the end of recording, sending and receiving
     end_of_send_event = asyncio.Event()
 
-    async with websockets.connect(args.url, ssl=ssl_context, ping_timeout=None) as websocket:
+    # Create headers
+    authorization_header = "Bearer " + args.key
+    user_id_header = "1234567890"
+
+    async with websockets.connect(
+        args.url,
+        ssl=ssl_context,
+        ping_timeout=None,
+        extra_headers=[("Authorization", authorization_header), ("X-End-UserID", user_id_header)],
+    ) as websocket:
         # Send the first message
         initial_message = json.dumps(
-            {"language": args.language, "hotwords": args.hotwords, "manual_punctuation": args.manual_punctuation})
+            {"language": args.language, "hotwords": args.hotwords, "manual_punctuation": args.manual_punctuation}
+        )
         await websocket.send(initial_message)
 
         loop = asyncio.get_running_loop()
 
-        receive_task = asyncio.create_task(
-            receive_messages(end_of_send_event, websocket))
+        receive_task = asyncio.create_task(receive_messages(end_of_send_event, websocket))
 
-        recording_task = asyncio.create_task(
-            record_audio(end_of_send_event, websocket, loop))
+        recording_task = asyncio.create_task(record_audio(end_of_send_event, websocket, loop))
 
-        user_input_task = asyncio.create_task(
-            wait_for_user_input(end_of_send_event, websocket))
+        user_input_task = asyncio.create_task(wait_for_user_input(end_of_send_event, websocket))
         await asyncio.gather(receive_task, user_input_task, recording_task)
 
     print("Over and out.")
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(
-        description='Process command line arguments.')
-    parser.add_argument('--url', type=str, required=True,
-                        help='Websocket URL')
-    parser.add_argument('--language', type=str,
-                        required=True, help='Language ("fr" or "en" or "it")')
-    parser.add_argument('--manual_punctuation', type=bool,
-                        required=True, help='Manual punctuation flag')
-    parser.add_argument('--hotwords', type=str,
-                        required=True, help='Hotwords string (comma separated))')
+    parser = argparse.ArgumentParser(description="Process command line arguments.")
+    parser.add_argument("--url", type=str, required=True, help="Websocket URL")
+    parser.add_argument("--language", type=str, required=True, help='Language ("fr" or "en" or "it")')
+    parser.add_argument("--manual_punctuation", type=bool, required=True, help="Manual punctuation flag")
+    parser.add_argument("--hotwords", type=str, required=True, help="Hotwords string (comma separated))")
+    parser.add_argument("--key", type=str, required=True, help="API key")
     return parser.parse_args()
 
 
